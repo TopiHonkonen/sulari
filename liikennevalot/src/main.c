@@ -26,6 +26,8 @@ int led_state = 0;
 
 int direction = 0;
 
+int paused = 0;
+
 //Configure buttons
 #define BUTTON_0 DT_ALIAS(sw0)
 // #define BUTTON_1 DT_ALIAS(sw1)
@@ -46,8 +48,6 @@ int main(void)
 	while (1) {
 		k_msleep(10); // sleep 10ms
 	}
-
-	return 0;
 
 	return 0;
 }
@@ -86,12 +86,16 @@ void red_led_task(void *, void *, void*) {
 			gpio_pin_set_dt(&red,1);
 			printk("Red on\n");
 			k_sleep(K_SECONDS(1));
-			gpio_pin_set_dt(&red,0);
-			printk("Red off\n");
+			if (!paused) {
+				gpio_pin_set_dt(&red,0);
+				printk("Red off\n");
+			}
 			led_state = 1;
 			direction = 0;
 		}
-		k_yield();
+		if (!paused) {
+			k_yield();
+		}
 	}
 }
 
@@ -106,17 +110,21 @@ void yellow_led_task(void *, void *, void*) {
 			gpio_pin_set_dt(&green,1);
 			printk("Green on\n");
 			k_sleep(K_SECONDS(1));
-			gpio_pin_set_dt(&red,0);
-			printk("Red off\n");
-			gpio_pin_set_dt(&green,0);
-			printk("Green off\n");
+			if (!paused) {
+				gpio_pin_set_dt(&red,0);
+				printk("Red off\n");
+				gpio_pin_set_dt(&green,0);
+				printk("Green off\n");
+			}
 			if (direction) {
 				led_state = 0;
 			} else {
 				led_state = 2;
 			}
 		}
-		k_yield();
+		if (!paused) {
+			k_yield();
+		}
 	}
 }
 
@@ -129,17 +137,22 @@ void green_led_task(void *, void *, void*) {
 			gpio_pin_set_dt(&green,1);
 			printk("Green on\n");
 			k_sleep(K_SECONDS(1));
-			gpio_pin_set_dt(&green,0);
-			printk("Green off\n");
+			if (!paused) {
+				gpio_pin_set_dt(&green,0);
+				printk("Green off\n");
+			}
 			led_state = 0;
 			direction = 1;
 		}
-		k_yield();
+		if (!paused) {
+			k_yield();
+		}
 	}
 }
 // Button interrupt handler
 void button_0_handler(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
 {
+	paused = !paused;
 	printk("Button pressed\n");
 }
 
