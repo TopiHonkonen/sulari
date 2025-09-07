@@ -145,7 +145,7 @@ void green_led_task(void *, void *, void*) {
 				gpio_pin_set_dt(&green,0);
 				printk("Green off\n");
 			}
-			led_state = 0;
+			led_state = 1;
 			direction = 1;
 		}
 		if (!paused) {
