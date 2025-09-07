@@ -30,9 +30,13 @@ int paused = 0;
 
 //Configure buttons
 #define BUTTON_0 DT_ALIAS(sw0)
+#define BUTTON_1 DT_ALIAS(sw1)
 // #define BUTTON_1 DT_ALIAS(sw1)
 static const struct gpio_dt_spec button_0 = GPIO_DT_SPEC_GET_OR(BUTTON_0, gpios, {0});
 static struct gpio_callback button_0_data;
+
+static const struct gpio_dt_spec button_1 = GPIO_DT_SPEC_GET_OR(BUTTON_1, gpios, {1});
+static struct gpio_callback button_1_data;
 
 
 // Main program
@@ -152,8 +156,14 @@ void green_led_task(void *, void *, void*) {
 // Button interrupt handler
 void button_0_handler(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
 {
-	paused = !paused;
-	printk("Button pressed\n");
+	paused = 0;
+	printk("Button 0 pressed\n");
+}
+// Button interrupt handler
+void button_1_handler(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
+{
+	paused = 1;
+	printk("Button 1 pressed\n");
 }
 
 // Button initialization
@@ -180,6 +190,31 @@ int init_button() {
 	gpio_init_callback(&button_0_data, button_0_handler, BIT(button_0.pin));
 	gpio_add_callback(button_0.port, &button_0_data);
 	printk("Set up button 0 ok\n");
+
+
+
+
+
+	if (!gpio_is_ready_dt(&button_1)) {
+		printk("Error: button 1 is not ready\n");
+		return -1;
+	}
+
+	ret = gpio_pin_configure_dt(&button_1, GPIO_INPUT);
+	if (ret != 0) {
+		printk("Error: failed to configure pin\n");
+		return -1;
+	}
+
+	ret = gpio_pin_interrupt_configure_dt(&button_1, GPIO_INT_EDGE_TO_ACTIVE);
+	if (ret != 0) {
+		printk("Error: failed to configure interrupt on pin\n");
+		return -1;
+	}
+
+	gpio_init_callback(&button_1_data, button_1_handler, BIT(button_1.pin));
+	gpio_add_callback(button_1.port, &button_1_data);
+	printk("Set up button 1 ok\n");
 
 	return 0;
 }
