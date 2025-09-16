@@ -59,7 +59,7 @@ K_THREAD_DEFINE(uart_thread,STACKSIZE,uart_task,NULL,NULL,NULL,PRIORITY,0,0);
 
 int led_state = 0;
 
-int direction = 0;
+int release = 0;
 
 int paused = 0;
 
@@ -144,6 +144,7 @@ static void dispatcher_task(void *unused1, void *unused2, void *unused3)
 
 		printk("Dispatcher: %s\n", sequence);
 		for(int i=0;i<20;i++) {
+			printk("dispatcher task\n");
 			switch(sequence[i]) {
 				case 'R':
 					led_state=1;
@@ -155,7 +156,10 @@ static void dispatcher_task(void *unused1, void *unused2, void *unused3)
 					led_state=3;
 					break;
 			}
-			k_yield();
+			release = 0;
+			while (!release) {
+				k_yield();
+			}
 		}
 		k_yield();
         // You need to:
@@ -198,6 +202,7 @@ void led_task(void *, void *, void*)
 {
 	printk("Led task started\n");
 	while (true) {
+		printk("led task\n");
 		switch(led_state) {
 			case 1:
 				gpio_pin_set_dt(&red,1);
@@ -220,6 +225,7 @@ void led_task(void *, void *, void*)
 					gpio_pin_set_dt(&green,0);
 				}
 				led_state = 0;
+				release = 1;
 			default:
 				k_yield();
 				break;
@@ -338,10 +344,6 @@ int init_button()
 	gpio_init_callback(&button_0_data, button_0_handler, BIT(button_0.pin));
 	gpio_add_callback(button_0.port, &button_0_data);
 	printk("Set up button 0 ok\n");
-
-
-
-
 
 	if (!gpio_is_ready_dt(&button_1)) {
 		printk("Error: button 1 is not ready\n");
