@@ -18,6 +18,7 @@ static const struct gpio_dt_spec green = GPIO_DT_SPEC_GET(DT_ALIAS(led1), gpios)
 //void red_led_task(void *, void *, void*);
 //void yellow_led_task(void *, void *, void*);
 //void green_led_task(void *, void *, void*);
+void led_task(void*, void*, void*);
 
 int init_led();
 int init_button();
@@ -50,7 +51,8 @@ int init_uart(void)
 
 //K_THREAD_DEFINE(red_thread,STACKSIZE,red_led_task,NULL,NULL,NULL,PRIORITY,0,0);
 //K_THREAD_DEFINE(yellow_thread,STACKSIZE,yellow_led_task,NULL,NULL,NULL,PRIORITY,0,0);
-//K_THREAD_DEFINE(green_thread,STACKSIZE,green_led_task,NULL,NULL,NULL,PRIORITY,0,0);
+//K_THREAD_DEFINE(yellow_thread,STACKSIZE,yellow_led_task,NULL,NULL,NULL,PRIORITY,0,0);
+K_THREAD_DEFINE(led_thread,STACKSIZE,led_task,NULL,NULL,NULL,PRIORITY,0,0);
 
 K_THREAD_DEFINE(dis_thread,STACKSIZE,dispatcher_task,NULL,NULL,NULL,PRIORITY,0,0);
 K_THREAD_DEFINE(uart_thread,STACKSIZE,uart_task,NULL,NULL,NULL,PRIORITY,0,0);
@@ -118,14 +120,12 @@ static void uart_task(void *unused1, void *unused2, void *unused3)
 				}
 
 				snprintf(buf->msg, 20, "%s", uart_msg);
+				//*buf->msg = uart_msg;
 
-				k_fifo_put(&liikennevalo_fifo, &uart_msg);
-
-				uart_msg_cnt = 0;
-				memset(uart_msg,0,20);
+				k_fifo_put(&liikennevalo_fifo, buf);
 
 				uart_msg_cnt = 0;
-				memset(uart_msg,0,20);
+				//memset(uart_msg,0,20);
 			}
 		}
 		//printk("waiting for data\n");
@@ -141,9 +141,22 @@ static void dispatcher_task(void *unused1, void *unused2, void *unused3)
 		char sequence[20];
 		memcpy(sequence,rec_item->msg,20);
 		k_free(rec_item);
-		printk("waiting for data\n");
 
 		printk("Dispatcher: %s\n", sequence);
+		for(int i=0;i<20;i++) {
+			switch(sequence[i]) {
+				case 'R':
+					led_state=1;
+					break;
+				case 'Y':
+					led_state=2;
+					break;
+				case 'G':
+					led_state=3;
+					break;
+			}
+			k_yield();
+		}
 		k_yield();
         // You need to:
         // Parse color and time from the fifo data
@@ -171,7 +184,6 @@ int  init_led()
 		printk("Error: Green Led configure failed\n");		
 		return ret;
 	}
-
 
 	// set led off
 	gpio_pin_set_dt(&red,0);
@@ -206,7 +218,6 @@ void led_task(void *, void *, void*)
 				if (!paused) {
 					gpio_pin_set_dt(&red,0);
 					gpio_pin_set_dt(&green,0);
-					printk("Red off\n");
 				}
 				led_state = 0;
 			default:
