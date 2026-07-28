@@ -7,6 +7,10 @@
 #include <zephyr/sys/util.h>
 #include <inttypes.h>
 
+#include <zephyr/timing/timing.h>
+
+//#define DEBUG
+
 // Led pin configurations
 static const struct gpio_dt_spec red = GPIO_DT_SPEC_GET(DT_ALIAS(led0), gpios);
 static const struct gpio_dt_spec green = GPIO_DT_SPEC_GET(DT_ALIAS(led1), gpios);
@@ -77,6 +81,11 @@ static struct gpio_callback button_1_data;
 // Main program
 int main(void)
 {
+	timing_init();
+	timing_start();
+
+	timing_t start_time = timing_counter_get();
+
 	init_led();
 
 	int ret = init_button();
@@ -89,6 +98,11 @@ int main(void)
 		printk("UART initialization failed!\n");
 		return ret;
 	}
+	
+	timing_t end_time = timing_counter_get();
+	timing_stop();
+	uint64_t timing_ns = timing_cycles_to_ns(timing_cycles_get(&start_time, &end_time));
+	printk("Main: %lld\n", timing_ns);
 
 	while (1) {
 		k_msleep(10); // sleep 10ms
@@ -99,6 +113,11 @@ int main(void)
 
 static void uart_task(void *unused1, void *unused2, void *unused3)
 {
+	timing_init();
+	timing_start();
+
+	timing_t start_time = timing_counter_get();
+
 	// Received character from UART
 	char rc=0;
 	// Message from UART
@@ -125,6 +144,11 @@ static void uart_task(void *unused1, void *unused2, void *unused3)
 				k_fifo_put(&liikennevalo_fifo, buf);
 
 				uart_msg_cnt = 0;
+
+				timing_t end_time = timing_counter_get();
+				timing_stop();
+				uint64_t timing_ns = timing_cycles_to_ns(timing_cycles_get(&start_time, &end_time));
+				printk("UART Task: %lld\n", timing_ns);
 				//memset(uart_msg,0,20);
 			}
 		}
@@ -135,6 +159,8 @@ static void uart_task(void *unused1, void *unused2, void *unused3)
 
 static void dispatcher_task(void *unused1, void *unused2, void *unused3)
 {
+	timing_start();
+	timing_t start_time = timing_counter_get();
 	printk("dispatcher task started\n");
 	while (true) {
 		struct data_t *rec_item = k_fifo_get(&liikennevalo_fifo, K_FOREVER);
@@ -144,7 +170,9 @@ static void dispatcher_task(void *unused1, void *unused2, void *unused3)
 
 		printk("Dispatcher: %s\n", sequence);
 		for(int i=0;i<20;i++) {
+#ifdef DEBUG
 			printk("dispatcher task\n");
+#endif
 			switch(sequence[i]) {
 				case 'R':
 					led_state=1;
@@ -155,28 +183,30 @@ static void dispatcher_task(void *unused1, void *unused2, void *unused3)
 				case 'G':
 					led_state=3;
 					break;
+				case '\0':
+					led_state = 4;
+					break;
 			}
 			release = 0;
 			while (!release) {
 				k_yield();
 			}
 		}
+		timing_t end_time = timing_counter_get();
+		timing_stop();
+		uint64_t timing_ns = timing_cycles_to_ns(timing_cycles_get(&start_time, &end_time));
+		printk("Dispatcher task: %lld\n", timing_ns);
 		k_yield();
-        // You need to:
-        // Parse color and time from the fifo data
-        // Example
-        //    char color = sequence[0];
-        //    int time = atoi(sequence+2);
-		//    printk("Data: %c %d\n", color, time);
-        // Send the parsed color information to tasks using fifo
-        // Use release signal to control sequence or k_yield
 	}
 }
 
 
 // Initialize leds
-int  init_led()
+int init_led()
 {
+	timing_start();
+	timing_init();
+	timing_t start_time = timing_counter_get();
 	// Led pin initialization
 	int ret = gpio_pin_configure_dt(&red, GPIO_OUTPUT_ACTIVE);
 	if (ret < 0) {
@@ -193,32 +223,57 @@ int  init_led()
 	gpio_pin_set_dt(&red,0);
 	gpio_pin_set_dt(&green,0);
 
-	printk("Led initialized ok\n");
+	timing_t end_time = timing_counter_get();
+	timing_stop();
+	uint64_t timing_ns = timing_cycles_to_ns(timing_cycles_get(&start_time, &end_time));
+	printk("Led initialized ok %lld\n", timing_ns);
 
 	return 0;
 }
 
+
 void led_task(void *, void *, void*)
 {
+	timing_start();
+	timing_init();
 	printk("Led task started\n");
-	while (true) {
-		printk("led task\n");
+
+	uint64_t total_time = 0;
+
+	bool running = true;
+
+	while (running) {
+		timing_t start_time = timing_counter_get();
 		switch(led_state) {
 			case 1:
 				gpio_pin_set_dt(&red,1);
+#ifdef DEBUG
 				printk("Red on\n");
+#endif
 				goto sleep;
 			case 2:
 				gpio_pin_set_dt(&red,1);
+#ifdef DEBUG
 				printk("Red on\n");
+#endif
 				gpio_pin_set_dt(&green,1);
+#ifdef DEBUG
 				printk("Green on\n");
+#endif
 				goto sleep;
 			case 3:
 				gpio_pin_set_dt(&green,1);
+#ifdef DEBUG
 				printk("Green on\n");
+#endif
 				goto sleep;
 			sleep:
+				timing_t end_time = timing_counter_get();
+				uint64_t timing_ns = timing_cycles_to_ns(timing_cycles_get(&start_time, &end_time));
+#ifdef DEBUG
+				printk("Led time %lld\n", timing_ns);
+#endif
+				total_time += timing_ns;
 				k_sleep(K_SECONDS(1));
 				if (!paused) {
 					gpio_pin_set_dt(&red,0);
@@ -226,87 +281,17 @@ void led_task(void *, void *, void*)
 				}
 				led_state = 0;
 				release = 1;
+				break;
+			case 4:
+				running = false;
 			default:
 				k_yield();
 				break;
 		}
 	}
+	printk("LED Task total time: %lld\n", total_time);
+	timing_stop();
 }
-
-
-//// Task to handle red led
-//void red_led_task(void *, void *, void*)
-//{
-//	printk("Red led thread started\n");
-//	while (true) {
-//		if (led_state == 0) {
-//			gpio_pin_set_dt(&red,1);
-//			printk("Red on\n");
-//			k_sleep(K_SECONDS(1));
-//			if (!paused) {
-//				gpio_pin_set_dt(&red,0);
-//				printk("Red off\n");
-//			}
-//			led_state = 1;
-//			direction = 0;
-//		}
-//		if (!paused) {
-//			k_yield();
-//		}
-//	}
-//}
-//
-//// Task to handle yellow led
-//void yellow_led_task(void *, void *, void*)
-//{
-//	printk("Yellow led thread started\n");
-//	while (true) {
-//		if (led_state == 1) {
-//			gpio_pin_set_dt(&red,1);
-//			printk("Red on\n");
-//			gpio_pin_set_dt(&green,1);
-//			printk("Green on\n");
-//			k_sleep(K_SECONDS(1));
-//			if (!paused) {
-//				gpio_pin_set_dt(&red,0);
-//				printk("Red off\n");
-//				gpio_pin_set_dt(&green,0);
-//				printk("Green off\n");
-//			}
-//			if (direction) {
-//				led_state = 0;
-//			} else {
-//				led_state = 2;
-//			}
-//		}
-//		if (!paused) {
-//			k_yield();
-//		}
-//	}
-//}
-//
-//// Task to handle green led
-//void green_led_task(void *, void *, void*)
-//{
-//	printk("Green led thread started\n");
-//	while (true) {
-//		if (led_state == 2) {
-//			gpio_pin_set_dt(&green,1);
-//			printk("Green on\n");
-//			k_sleep(K_SECONDS(1));
-//			if (!paused) {
-//				gpio_pin_set_dt(&green,0);
-//				printk("Green off\n");
-//			}
-//			led_state = 1;
-//			direction = 1;
-//		}
-//		if (!paused) {
-//			k_yield();
-//		}
-//	}
-//}
-
 // Button interrupt handler
 void button_0_handler(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
 {
