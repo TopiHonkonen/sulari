@@ -43,6 +43,15 @@ struct data_t {
 	char msg[20];
 };
 
+#define TIME_LEN_ERROR -1
+#define TIME_VALUE_ERROR -2
+#define TIME_ARRAY_ERROR -3
+
+int time_parse(char *time);
+static void timer_handler(struct k_timer *dummy);
+
+K_TIMER_DEFINE(led_timer, timer_handler, NULL);
+
 int init_uart(void)
 {
 	// UART initialization
@@ -111,6 +120,12 @@ int main(void)
 	return 0;
 }
 
+static void timer_handler(struct k_timer *dummy)
+{
+	led_state = 1;
+	k_yield();
+}
+
 static void uart_task(void *unused1, void *unused2, void *unused3)
 {
 	timing_init();
@@ -169,29 +184,10 @@ static void dispatcher_task(void *unused1, void *unused2, void *unused3)
 		k_free(rec_item);
 
 		printk("Dispatcher: %s\n", sequence);
-		for(int i=0;i<20;i++) {
-#ifdef DEBUG
-			printk("dispatcher task\n");
-#endif
-			switch(sequence[i]) {
-				case 'R':
-					led_state=1;
-					break;
-				case 'Y':
-					led_state=2;
-					break;
-				case 'G':
-					led_state=3;
-					break;
-				case '\0':
-					led_state = 4;
-					break;
-			}
-			release = 0;
-			while (!release) {
-				k_yield();
-			}
-		}
+		int time = time_parse(sequence);
+
+		k_timer_start(&led_timer, K_SECONDS(time), K_NO_WAIT);
+
 		timing_t end_time = timing_counter_get();
 		timing_stop();
 		uint64_t timing_ns = timing_cycles_to_ns(timing_cycles_get(&start_time, &end_time));
@@ -199,7 +195,6 @@ static void dispatcher_task(void *unused1, void *unused2, void *unused3)
 		k_yield();
 	}
 }
-
 
 // Initialize leds
 int init_led()
@@ -352,4 +347,36 @@ int init_button()
 	printk("Set up button 1 ok\n");
 
 	return 0;
+}
+
+int time_parse(char *time)
+{
+	int seconds;
+
+	if (*time == NULL) 
+		return TIME_ARRAY_ERROR;
+
+	int values[3];
+	values[2] = atoi(time+4); // seconds
+	time[4] = 0;
+	values[1] = atoi(time+2); // minutes
+	time[2] = 0;
+	values[0] = atoi(time); // hours
+
+	//Boundary checks
+	if (values[0] > 23 || values[0] < 0)
+		return TIME_VALUE_ERROR;
+	if (values[1] > 59 || values[1] < 0)
+		return TIME_VALUE_ERROR;
+	if (values[2] > 59 || values[2] < 0)
+		return TIME_VALUE_ERROR;
+
+	seconds = values[0] * 60 * 60 +
+			values[1] * 60 +
+			values[2];
+
+	if (seconds < 0)
+		seconds = TIME_LEN_ERROR;
+
+	return seconds;
 }
