@@ -111,7 +111,6 @@ int main(void)
 	timing_t end_time = timing_counter_get();
 	timing_stop();
 	uint64_t timing_ns = timing_cycles_to_ns(timing_cycles_get(&start_time, &end_time));
-	printk("Main: %lld\n", timing_ns);
 
 	while (1) {
 		k_msleep(10); // sleep 10ms
@@ -141,13 +140,11 @@ static void uart_task(void *unused1, void *unused2, void *unused3)
 	int uart_msg_cnt = 0;
 
 	while (true) {
-		if (uart_poll_in(uart_dev,&rc) == 0) {
-			if (rc != '\r') {
+		while (uart_poll_in(uart_dev,&rc) == 0) {
+			if (rc != 'X') {
 				uart_msg[uart_msg_cnt] = rc;
 				uart_msg_cnt++;
 			} else {
-				printk("UART msg: %s\n", uart_msg);
-
 				struct data_t *buf = k_malloc(sizeof(struct data_t));
 				if (buf == NULL) {
 					return;
@@ -163,9 +160,9 @@ static void uart_task(void *unused1, void *unused2, void *unused3)
 				timing_t end_time = timing_counter_get();
 				timing_stop();
 				uint64_t timing_ns = timing_cycles_to_ns(timing_cycles_get(&start_time, &end_time));
-				printk("UART Task: %lld\n", timing_ns);
 				//memset(uart_msg,0,20);
 			}
+			k_msleep(10);
 		}
 		//printk("waiting for data\n");
 		k_msleep(10);
@@ -176,22 +173,20 @@ static void dispatcher_task(void *unused1, void *unused2, void *unused3)
 {
 	timing_start();
 	timing_t start_time = timing_counter_get();
-	printk("dispatcher task started\n");
 	while (true) {
 		struct data_t *rec_item = k_fifo_get(&liikennevalo_fifo, K_FOREVER);
 		char sequence[20];
 		memcpy(sequence,rec_item->msg,20);
 		k_free(rec_item);
 
-		printk("Dispatcher: %s\n", sequence);
 		int time = time_parse(sequence);
+		printk("%dX", time);
 
 		k_timer_start(&led_timer, K_SECONDS(time), K_NO_WAIT);
 
 		timing_t end_time = timing_counter_get();
 		timing_stop();
 		uint64_t timing_ns = timing_cycles_to_ns(timing_cycles_get(&start_time, &end_time));
-		printk("Dispatcher task: %lld\n", timing_ns);
 		k_yield();
 	}
 }
@@ -221,7 +216,6 @@ int init_led()
 	timing_t end_time = timing_counter_get();
 	timing_stop();
 	uint64_t timing_ns = timing_cycles_to_ns(timing_cycles_get(&start_time, &end_time));
-	printk("Led initialized ok %lld\n", timing_ns);
 
 	return 0;
 }
@@ -231,7 +225,6 @@ void led_task(void *, void *, void*)
 {
 	timing_start();
 	timing_init();
-	printk("Led task started\n");
 
 	uint64_t total_time = 0;
 
@@ -242,32 +235,17 @@ void led_task(void *, void *, void*)
 		switch(led_state) {
 			case 1:
 				gpio_pin_set_dt(&red,1);
-#ifdef DEBUG
-				printk("Red on\n");
-#endif
 				goto sleep;
 			case 2:
 				gpio_pin_set_dt(&red,1);
-#ifdef DEBUG
-				printk("Red on\n");
-#endif
 				gpio_pin_set_dt(&green,1);
-#ifdef DEBUG
-				printk("Green on\n");
-#endif
 				goto sleep;
 			case 3:
 				gpio_pin_set_dt(&green,1);
-#ifdef DEBUG
-				printk("Green on\n");
-#endif
 				goto sleep;
 			sleep:
 				timing_t end_time = timing_counter_get();
 				uint64_t timing_ns = timing_cycles_to_ns(timing_cycles_get(&start_time, &end_time));
-#ifdef DEBUG
-				printk("Led time %lld\n", timing_ns);
-#endif
 				total_time += timing_ns;
 				k_sleep(K_SECONDS(1));
 				if (!paused) {
@@ -284,7 +262,6 @@ void led_task(void *, void *, void*)
 				break;
 		}
 	}
-	printk("LED Task total time: %lld\n", total_time);
 	timing_stop();
 }
 // Button interrupt handler
@@ -323,7 +300,6 @@ int init_button()
 
 	gpio_init_callback(&button_0_data, button_0_handler, BIT(button_0.pin));
 	gpio_add_callback(button_0.port, &button_0_data);
-	printk("Set up button 0 ok\n");
 
 	if (!gpio_is_ready_dt(&button_1)) {
 		printk("Error: button 1 is not ready\n");
@@ -344,7 +320,6 @@ int init_button()
 
 	gpio_init_callback(&button_1_data, button_1_handler, BIT(button_1.pin));
 	gpio_add_callback(button_1.port, &button_1_data);
-	printk("Set up button 1 ok\n");
 
 	return 0;
 }
